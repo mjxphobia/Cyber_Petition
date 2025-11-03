@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>저승 신문고</title>
+<style>
+  :root{
+    --fg:#111; --bg:#fff; --sub:#555; --acc:#0ea5e9; --card:#fff; --border:#e5e7eb;
+    --bar-bg:#f1f5f9; --bar-fill:#10b981;
+  }
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font-family:system-ui,"Noto Sans KR",sans-serif;}
+  .wrap{max-width:900px;margin:0 auto;padding:20px;}
+  .center{text-align:center}
+  .title{font-size:28px;font-weight:900;margin:6px 0 18px;letter-spacing:.3px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.06);padding:18px}
+  .list{display:flex;flex-direction:column;gap:12px}
+  .row{display:flex;flex-direction:column;gap:10px;border:1px solid var(--border);border-radius:12px;padding:14px}
+  .row h3{margin:0 0 6px;font-size:18px}
+  .meta{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .gauge{flex:1;height:12px;background:var(--bar-bg);border-radius:999px;overflow:hidden}
+  .gauge>span{display:block;height:100%;background:var(--bar-fill)}
+  .pct{min-width:52px;text-align:right;font-weight:800}
+
+  .btn{
+    display:inline-block;padding:12px 18px;border-radius:12px;border:1px solid #000;text-decoration:none;cursor:pointer;
+    background:#111;color:#fff;font-weight:800;transition:.15s;
+  }
+  .btn.alt{background:#fff;color:#111;border-color:#111}
+  .btn.ghost{background:transparent;color:#111;border-color:var(--border)}
+  .btn:active{transform:translateY(0)}
+  .btn:hover{filter:brightness(1.02);transform:translateY(-1px)}
+
+  .spacer{height:12px}
+  [hidden]{display:none!important}
+
+  /* 상세 */
+  .post-title{font-size:22px;font-weight:900;margin:0 0 8px}
+  .post-body{color:#333;line-height:1.7;margin:0}
+
+  /* 작성 폼 */
+  .field{display:flex;flex-direction:column;gap:8px;margin:10px 0}
+  .label{font-weight:800}
+  input[type="text"]{
+    border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;font-size:16px;outline:none;background:#fff;
+  }
+
+  /* 본문 안의 빈칸 스타일 */
+  .template{
+    line-height:1.9;
+    border:1px dashed var(--border);
+    border-radius:12px;
+    padding:14px;
+    background:#fcfcfc;
+  }
+  .blank{
+    display:inline-block; padding:2px 6px; margin:0 2px; border-bottom:2px solid #111; cursor:pointer;
+    background:#fff; border-radius:6px; min-width:2.8em; text-align:center;
+  }
+  .blank.placeholder{ color:#9aa0a6; font-style:italic; border-bottom-color:#b9c0c7; }
+  .blank.filled{ background:#e8f7ff; border-bottom-color:#0ea5e9; color:#111; font-style:normal; }
+
+  /* 엑셀 느낌 드롭다운(빈칸 아래에 뜸) */
+  .xlbox{
+    position:absolute;
+    z-index:9999;
+    background:#fff;
+    border:1px solid #b6b6b6;
+    border-radius:6px;
+    box-shadow:0 6px 16px rgba(0,0,0,.15);
+    min-width:140px;
+    max-width:240px;
+    overflow:hidden;
+  }
+  .xl-item{
+    padding:8px 10px;
+    font-size:14px;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  .xl-item:hover{ background:#e8f0fe; }
+
+  /* 토스트 */
+  .toast{
+    position:fixed; left:50%; top:24px; transform:translateX(-50%);
+    background:#111; color:#fff; padding:10px 14px; border-radius:10px;
+    box-shadow:0 6px 16px rgba(0,0,0,.2);
+    opacity:0; pointer-events:none; transition:.25s ease;
+  }
+  .toast.show{opacity:1}
+
+  @media (max-width:520px){
+    .title{font-size:24px}
+  }
+</style>
+</head>
+<body>
+  <main class="wrap">
+
+    <!-- 홈: 목록 -->
+    <section id="page-home" class="card">
+      <h1 class="title center">저승 신문고</h1>
+
+      <div id="post-list" class="list"></div>
+
+      <div class="spacer"></div>
+      <div class="center">
+        <button class="btn" id="create-btn">신규 작성하기</button>
+      </div>
+    </section>
+
+    <!-- 상세 -->
+    <section id="page-detail" class="card" hidden>
+      <h2 id="detail-title" class="post-title"></h2>
+      <p id="detail-body" class="post-body"></p>
+      <div class="spacer"></div>
+      <div class="center" style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+        <button class="btn alt" id="vote-btn">투표하기</button>
+        <button class="btn ghost" id="back-home-1">뒤로가기</button>
+      </div>
+    </section>
+
+    <!-- 작성 -->
+    <section id="page-new" class="card" hidden>
+      <h2 class="title center" style="margin-bottom:6px;">새 청원 작성</h2>
+
+      <div class="field">
+        <label class="label" for="title-input">제목</label>
+        <input id="title-input" type="text" placeholder="제목을 입력해주세요." />
+      </div>
+
+      <div class="field">
+        <div class="label">청원문</div>
+        <!-- 기본은 '선택'(회색)으로 비어있는 상태 -->
+        <div id="template" class="template">
+          존경하는 <span class="blank placeholder" data-key="target">선택</span>,
+          <span class="blank placeholder" data-key="place">선택</span>의 모든 메뉴에
+          <span class="blank placeholder" data-key="ingredient">선택</span>가 들어가 국민들이 힘들어하고 있습니다.
+          <span class="blank placeholder" data-key="proposal">선택</span>로 음식을 만들게 해주세요.
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="center" style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+        <button class="btn" id="submit" hidden>제출하기</button>
+        <button class="btn ghost" id="back-home-2">뒤로가기</button>
+      </div>
+    </section>
+
+    <!-- 제출 완료 -->
+    <section id="page-done" class="card center" hidden>
+      <h2 class="title" style="margin-bottom:4px;">접수 안내</h2>
+      <div id="typeout" class="type mono"></div>
+      <div class="spacer"></div>
+      <button class="btn" id="to-reply" hidden>염라대왕님의 답변이 도착했습니다</button>
+    </section>
+
+    <!-- 답변 -->
+    <section id="page-reply" class="card center" hidden>
+      <h2 class="title" style="margin-bottom:6px;">답변</h2>
+      <div class="mono" style="font-size:22px; font-weight:900; letter-spacing:.2em;">ONE DAY WAIT</div>
+      <div class="spacer"></div>
+      <button class="btn ghost" id="back-home-3">처음으로</button>
+    </section>
+
+  </main>
+
+  <!-- 투표 토스트 -->
+  <div id="toast" class="toast">소중한 한표 감사합니다</div>
+
+<script>
+/* ===== 샘플 데이터 ===== */
+const posts = [
+  {
+    id: 1,
+    title: "복권방 주인 비리의혹으로 인한 검찰수사를 요청드립니다",
+    body:
+`존경하는 관계부처 담당자께.
+
+최근 저승 복권방에서의 부정 행위에 대한 신고가 다수 접수되었습니다.
+공정한 절차와 신뢰 회복을 위해 철저한 수사가 필요합니다.
+저승 시민의 알 권리와 공정한 거래 질서를 위해 신속한 조치를 요청드립니다.
+
+감사합니다.`,
+    percent: 72
+  },
+  {
+    id: 2,
+    title: "솔로지옥 2회 개최부탁드립니다",
+    body:
+`안녕하십니까.
+
+저승 문화 진흥을 위해 솔로지옥 2회 개최를 공식 제안합니다.
+참여 수요가 충분하고, 저승 관광 및 경제 활성화에 긍정적 효과가 기대됩니다.
+공정한 선발, 안전 관리, 윤리 기준을 갖춘 운영 계획 수립을 요청드립니다.
+
+감사합니다.`,
+    percent: 41
+  },
+  {
+    id: 3,
+    title: "저승창립기념일 공휴일로 지정해주세요",
+    body:
+`안전하고 지속 가능한 저승 사회를 기념하기 위해
+저승창립기념일을 공식 공휴일로 지정해 주시길 청원합니다.
+휴식과 공동체 결속을 강화해 생산성과 만족도를 높이는 데 기여할 것입니다.
+
+검토 부탁드립니다.`,
+    percent: 89
+  }
+];
+
+/* ===== 엘리먼트 ===== */
+const pageHome  = document.getElementById('page-home');
+const pageDetail= document.getElementById('page-detail');
+const pageNew   = document.getElementById('page-new');
+const pageDone  = document.getElementById('page-done');
+const pageReply = document.getElementById('page-reply');
+
+const listEl    = document.getElementById('post-list');
+const dTitle    = document.getElementById('detail-title');
+const dBody     = document.getElementById('detail-body');
+
+const createBtn = document.getElementById('create-btn');
+const back1     = document.getElementById('back-home-1');
+const back2     = document.getElementById('back-home-2');
+const back3     = document.getElementById('back-home-3');
+
+const submitBtn = document.getElementById('submit');
+const typeout   = document.getElementById('typeout');
+const toReply   = document.getElementById('to-reply');
+
+const titleInput= document.getElementById('title-input');
+const toast     = document.getElementById('toast');
+
+const templateEl= document.getElementById('template');
+
+/* ===== 홈 리스트 렌더링 ===== */
+function renderList(){
+  listEl.innerHTML = posts.map(p => `
+    <article class="row">
+      <h3>${p.title}</h3>
+      <div class="meta">
+        <div class="gauge" aria-label="참여율 ${p.percent}%">
+          <span style="width:${p.percent}%"></span>
+        </div>
+        <div class="pct">${p.percent}%</div>
+      </div>
+      <div class="center" style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+        <button class="btn alt" onclick="openDetail(${p.id})">자세히 보기</button>
+      </div>
+    </article>
+  `).join('');
+}
+
+/* ===== 네비게이션 ===== */
+function show(section){
+  [pageHome,pageDetail,pageNew,pageDone,pageReply].forEach(s=>s.hidden=true);
+  section.hidden = false;
+  window.scrollTo({top:0,behavior:'instant'});
+}
+function openDetail(id){
+  const p = posts.find(x=>x.id===id);
+  if(!p) return;
+  dTitle.textContent = p.title;
+  dBody.textContent  = p.body;
+  show(pageDetail);
+}
+
+/* ===== 투표 토스트 ===== */
+function showToast(msg="소중한 한표 감사합니다"){
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(()=> toast.classList.remove('show'), 1500);
+}
+
+/* 상세페이지: 투표하기 */
+document.getElementById('vote-btn').addEventListener('click', ()=>{
+  showToast("소중한 한표 감사합니다");
+});
+
+/* ===== 작성 페이지: 빈칸 선택 로직 ===== */
+const correctMap = {
+  target: "염라대왕님",
+  place: "구내식당",
+  ingredient: "치즈",
+  proposal: "다양한 재료"
+};
+const optionsMap = {
+  target: ["염라대왕님","저승차사님","삼도천관리국장님"],
+  place: ["구내식당","경비실","민원실"],
+  ingredient: ["치즈","민트초코","마라소스"],
+  proposal: ["다양한 재료","단일 재료","무염 식단"]
+};
+function shuffle(arr){ return [...arr].sort(()=>Math.random()-0.5); }
+
+let dropdown; // 현재 열린 드롭다운
+
+// 빈칸 클릭 → 엑셀식 드롭다운 표시
+templateEl.addEventListener('click', (e)=>{
+  const span = e.target.closest('.blank');
+  if(!span) return;
+
+  // 기존 드롭다운 제거
+  closeDropdown();
+
+  const key = span.dataset.key;
+  const opts = shuffle(optionsMap[key] || []);
+
+  // 드롭다운 DOM
+  dropdown = document.createElement('div');
+  dropdown.className = 'xlbox';
+  dropdown.innerHTML = opts.map(v=>`<div class="xl-item" data-val="${v}">${v}</div>`).join('');
+
+  // 페이지 내 절대 좌표 계산 → 빈칸 바로 아래
+  const rect = span.getBoundingClientRect();
+  dropdown.style.left = `${rect.left + window.scrollX}px`;
+  dropdown.style.top  = `${rect.bottom + window.scrollY + 4}px`;
+
+  document.body.appendChild(dropdown);
+
+  // 항목 클릭
+  dropdown.addEventListener('click', (ev)=>{
+    const item = ev.target.closest('.xl-item'); if(!item) return;
+    const val = item.dataset.val;
+    span.textContent = val;
+    span.classList.add('filled');
+    span.classList.remove('placeholder');
+    closeDropdown();
+    checkAllReady();
+  }, { once:false });
+
+  // 바깥 클릭 시 닫기
+  document.addEventListener('mousedown', outsideClose, { capture:true, once:true });
+});
+
+function outsideClose(ev){
+  if(dropdown && !dropdown.contains(ev.target)) closeDropdown();
+}
+function closeDropdown(){
+  if(dropdown){ dropdown.remove(); dropdown = null; }
+}
+
+// 제목/본문 상태 체크 → 제출 버튼 노출
+function checkAllReady(){
+  const titleOk = !!titleInput.value.trim();
+  const spans = templateEl.querySelectorAll('.blank');
+  let allCorrect = true;
+  spans.forEach(s=>{
+    const key = s.dataset.key;
+    const val = s.textContent.trim();
+    if(val !== correctMap[key]) allCorrect = false;
+  });
+  submitBtn.hidden = !(titleOk && allCorrect);
+}
+
+// 제목 입력 변화 감지
+titleInput.addEventListener('input', checkAllReady);
+
+/* ===== 제출 → 타자 출력 → 답변 ===== */
+submitBtn.addEventListener('click', ()=>{
+  show(pageDone);
+  typeout.textContent = "";
+  toReply.hidden = true;
+
+  const text = "제출이 완료되었습니다.";
+  let i = 0;
+  const timer = setInterval(()=>{
+    typeout.textContent += text[i++];
+    if(i >= text.length){
+      clearInterval(timer);
+      setTimeout(()=>{ toReply.hidden = false; }, 500);
+    }
+  }, 80);
+});
+
+toReply.addEventListener('click', ()=> show(pageReply));
+
+/* ===== 이동 버튼 ===== */
+document.getElementById('back-home-1').addEventListener('click', ()=> show(pageHome));
+document.getElementById('back-home-2').addEventListener('click', ()=> show(pageHome));
+document.getElementById('back-home-3').addEventListener('click', ()=> show(pageHome));
+document.getElementById('create-btn').addEventListener('click', ()=> show(pageNew));
+
+/* ===== 초기화 ===== */
+renderList();
+show(pageHome);
+</script>
+</body>
+</html>
