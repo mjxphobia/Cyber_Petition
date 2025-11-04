@@ -32,28 +32,21 @@
   }
   .gate-title{font-weight:900; font-size:20px; margin:8px 0 10px; text-align:center;}
   .gate-caption{color:#555; margin:10px 0 0; font-size:14px; text-align:center;}
+
   .hud{display:flex; gap:6px; justify-content:center; margin-top:12px;}
-  /* 진행 표시 점(→ 봉으로 교체) */
-.dot {
-  width: 36px;   /* 기존의 2배 크기 */
-  height: 36px;
-  display: inline-block;
-  margin: 0 6px;
-  background: #c7c7c7;
-  border-radius: 50%;
-  transition: background 0.2s, transform 0.2s;
-}
+  /* 진행 표시 ‘점’ 대신 봉(stick.png) */
+  .dot{
+    width:36px; height:36px;
+    display:inline-block; margin:0 6px;
+    background:#c7c7c7; border-radius:50%;
+    transition:background .2s, transform .2s;
+  }
+  .dot.on{
+    background:url("static/stick.png") no-repeat center center / contain;
+    border-radius:0; background-color:transparent; transform:scale(1.05);
+  }
 
-  .dot.on {
-  background: url("static/stick.png") no-repeat center center / contain;
-  border-radius: 0;           /* 봉처럼 보이게 둥근 테두리 제거 */
-  background-color: transparent;
-  transform: scale(1.05);
-}
-
-
-
-  /* ─── 신문고 기본 스타일(이전 그대로) ─── */
+  /* ─── 신문고 기본 스타일 ─── */
   .list{display:flex;flex-direction:column;gap:12px}
   .row{display:flex;flex-direction:column;gap:10px;border:1px solid var(--border);border-radius:12px;padding:14px}
   .row h3{margin:0 0 6px;font-size:18px}
@@ -84,6 +77,13 @@
          box-shadow:0 6px 16px rgba(0,0,0,.2); opacity:0; pointer-events:none; transition:.25s ease;}
   .toast.show{opacity:1}
   @media (max-width:520px){ .title{font-size:24px} }
+
+  /* 퍼즐 아래에 잠깐 뜨는 리셋 안내 */
+  .gate-msg{
+    text-align:center; color:#b00020; font-weight:800;
+    min-height:1.2em; opacity:0; transition:.2s;
+  }
+  .gate-msg.show{ opacity:1; }
 </style>
 </head>
 <body>
@@ -97,6 +97,7 @@
         <div class="grid" id="grid"></div>
       </div>
       <div class="hud" id="hud"></div>
+      <p id="gate-msg" class="gate-msg"></p>
       <p class="gate-caption"> *신문고는 한국 조선 시대에 <br> 억울한 백성이 왕에게 직접 <br> 호소하기 위해 설치된 제도입니다. </p>
     </div>
   </section>
@@ -175,6 +176,7 @@ const SEQ = [
   [ ["2","2"], ["2","3"], ["3","2"], ["3","3"] ]  // step 6: 네 칸 중 아무거나
 ];
 
+/* 진행 HUD(봉 6개) */
 const hud = document.getElementById('hud');
 hud.innerHTML = SEQ.map((_,i)=>`<span class="dot" id="d${i}"></span>`).join('');
 function paintProgress(n){
@@ -182,8 +184,13 @@ function paintProgress(n){
     document.getElementById(`d${i}`).classList.toggle('on', i < n);
   }
 }
-let progress = 0; paintProgress(progress);
 
+/* 초기 상태 */
+let progress = 0;
+let inputLocked = false;
+paintProgress(progress);
+
+/* 4x4 클릭 버튼 생성 */
 const grid = document.getElementById('grid');
 for(let y=1; y<=4; y++){
   for(let x=1; x<=4; x++){
@@ -195,47 +202,56 @@ for(let y=1; y<=4; y++){
   }
 }
 
-// ✅ 누른 좌표가 정답인지 판정하는 함수
+/* 좌표 판정 (마지막 스텝은 여러 칸 중 하나 허용) */
 function isAllowed(step, x, y){
   const target = SEQ[step];
   if (!target) return false;
-
-  // 마지막 단계: 여러 칸 중 하나 허용
-  if (Array.isArray(target[0])) {
-    return target.some(([ax, ay]) => ax === x && ay === y);
+  if (Array.isArray(target[0])){
+    return target.some(([ax,ay]) => ax===x && ay===y);
   }
-
-  // 일반 단계: 정확히 일치해야 함
-  const [tx, ty] = target;
-  return tx === x && ty === y;
+  const [tx,ty] = target;
+  return tx===x && ty===y;
 }
 
-
-
-function onHit(e){
-  const [x, y] = (e.currentTarget.dataset.xy || "").split(",");
-
-  // 정답일 경우
-  if (isAllowed(progress, x, y)) {
-    progress++;
-    paintProgress(progress);
-    if (progress === SEQ.length) {
-      document.getElementById('page-gate').hidden = true;
-      startSinmungo();
-    }
-  } 
-  // 틀리든 맞든 일단 북은 흔들림
-  shake();
+/* 오답 시 완전 리셋 + 안내 */
+function resetPuzzle(){
+  progress = 0;
+  paintProgress(0);
+  const msg = document.getElementById('gate-msg');
+  if (msg){
+    msg.textContent = "틀렸습니다. 처음부터 다시!";
+    msg.classList.add('show');
+    setTimeout(()=> msg.classList.remove('show'), 900);
+  }
 }
 
-
-/* 흔들림 애니메이션만 (테두리 없음) */
+/* 흔들림 애니메이션(테두리 X) */
 function shake(){
   const el = document.getElementById('drum');
   el.animate(
     [{transform:"translateX(0)"},{transform:"translateX(-10px)"},{transform:"translateX(10px)"},{transform:"translateX(0)"}],
     {duration:220, easing:"ease-in-out"}
   );
+}
+
+/* 클릭 처리 */
+function onHit(e){
+  if (inputLocked) return;
+  const [x,y] = (e.currentTarget.dataset.xy || "").split(",");
+
+  if (isAllowed(progress, x, y)){
+    progress++;
+    paintProgress(progress);
+    if (progress === SEQ.length){
+      document.getElementById('page-gate').hidden = true;
+      startSinmungo();
+    }
+  } else {
+    inputLocked = true;
+    shake();
+    resetPuzzle();
+    setTimeout(()=> inputLocked = false, 300);
+  }
 }
 
 /* ───────────────── 저승 신문고(앱) 로직 ───────────────── */
