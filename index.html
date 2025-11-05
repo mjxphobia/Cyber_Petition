@@ -237,6 +237,9 @@ function shake(){
 /* 클릭 처리 */
 function onHit(e){
   if (inputLocked) return;
+
+// ✅ 무조건 흔들기 (정답/오답 상관없이)
+  shake();
   const [x,y] = (e.currentTarget.dataset.xy || "").split(",");
 
   if (isAllowed(progress, x, y)){
@@ -405,3 +408,4 @@ function startSinmungo(){
 </script>
 </body>
 </html>
+
